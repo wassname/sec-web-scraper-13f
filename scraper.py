@@ -46,7 +46,10 @@ def scrap_company_report(requested_cik, name):
     soup = BeautifulSoup(response.text, "html.parser")
     main = soup.find(id="seriesDiv")
     rows = main.findAll('tr')[1:] # skip header
-    for row in rows[:4]:
+    if len(rows)==0:
+        logger.warn(f"no reports for {name} {url}")
+    
+    for row in rows[:2]:
         date = row.findAll('td')[3].text
         tag = row.find('a', id="documentsbutton")
         last_report = (sec_url + tag['href'])
@@ -54,57 +57,26 @@ def scrap_company_report(requested_cik, name):
         scrap_report_by_url(last_report, f"{name}/{date}")
 
 
-def scrap_report_by_url(url, filename):
+def scrap_report_by_url(url, name):
     response_two = get_request(url)
     soup_two = BeautifulSoup(response_two.text, "html.parser")
     tags_two = soup_two.findAll('a', attrs={'href': re.compile('xml')})
-    xml_url = tags_two[3].get('href')
-
+    xml_url = tags_two[2].get('href')
     response_xml = get_request(sec_url + xml_url)
-    soup_xml = BeautifulSoup(response_xml.content, "lxml")
-    xml_to_csv(soup_xml, filename)
-
-
-def xml_to_csv(soup_xml, name):
-
-    columns = [
-        "Name of Issuer",
-        "CUSIP",
-        "Value (x$1000)",
-        "Shares",
-        "Investment Discretion",
-        "Voting Sole / Shared / None"
-    ]
-    issuers = soup_xml.body.findAll(re.compile('nameofissuer'))
-    cusips = soup_xml.body.findAll(re.compile('cusip'))
-    values = soup_xml.body.findAll(re.compile('value'))
-    sshprnamts = soup_xml.body.findAll('sshprnamt')
-    sshprnamttypes = soup_xml.body.findAll(re.compile('sshprnamttype'))
-    investmentdiscretions = soup_xml.body.findAll(re.compile('investmentdiscretion'))
-    soles = soup_xml.body.findAll(re.compile('sole'))
-    shareds = soup_xml.body.findAll(re.compile('shared'))
-    nones = soup_xml.body.findAll(re.compile('none'))
-
-    df = pd.DataFrame(columns= columns)
-
-    for issuer, cusip, value, sshprnamt, sshprnamttype, investmentdiscretion, sole, shared, none in zip(issuers, cusips, values, sshprnamts, sshprnamttypes, investmentdiscretions, soles, shareds, nones):
-        row = {
-            "Name of Issuer": issuer.text,
-            "CUSIP": cusip.text,
-            "Value (x$1000)": value.text,
-            "Shares": f"{sshprnamt.text} {sshprnamttype.text}",
-            "Investment Discretion": investmentdiscretion.text,
-            "Voting Sole / Shared / None": f"{sole.text} / {shared.text} / {none.text}"
-        }
-        df = df.append(row, ignore_index=True)
-
+    soup_xml = BeautifulSoup(response_xml.content, "html.parser")
+    table = soup_xml.find(summary="Form 13F-NT Header Information")
+    df = pd.read_html(str(table), header=[1, 2])[0]
+    df.columns = [(b if a.startswith('Unnamed') else f"{a} {b}")for a,b in df.columns ]
+    # df.columns = [" ",] + list(df.columns[1:])
 
     fo = Path(f"output/{name}.csv")
     fo.parent.mkdir(exist_ok=True)
-    df.to_csv(fo)
+    df.to_csv(fo, index=False)
+    logger.info(fo)
 
 # List of Investments
-CIK_LIST = [{
+CIK_LIST = [
+    {
     'name': 'Buffett',
     'cik': '0001067983'
 }, {
@@ -131,13 +103,14 @@ CIK_LIST = [{
 }, {
     'name': 'AQR',
     'cik': '0001167557'
-},{
+},
+{
     'name': 'Scion Asset Management',
     'cik': '0001649339'
 },
 {
-    'name': 'Burry Michael J',
-    'cik': '0001342573'
+    'name': 'KYNIKOS ASSOCIATES LP',
+    'cik': '0001446440'
 },
 ]
 for row in tqdm(CIK_LIST):

@@ -22,3 +22,8 @@ This repository contains a Python Web scraper for parsing 13F filings (mutual fu
 
 ## References
 - [SEC: Frequently Asked Questions About Form 13F](https://www.sec.gov/divisions/investment/13ffaq.htm)
+
+
+# TODO
+
+- form 4 Form 4 - Insider Buying/Selling
